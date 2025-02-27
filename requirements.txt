@@ -6,3 +6,4 @@ numpy==1.24.3
 tensorflow==2.14.0
 h5py==3.8.0
 requests==2.31.0
+psutil==5.9.5
