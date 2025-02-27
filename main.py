@@ -7,6 +7,8 @@ import io
 import os
 import time
 import json
+import subprocess
+import sys
 
 # Direct DeepDanbooru model handling without using the commands module
 app = FastAPI(
@@ -28,6 +30,54 @@ app.add_middleware(
 model = None
 tags_list = None
 
+def download_file(url, destination):
+    """Download a file with better error handling."""
+    print(f"Downloading {url} to {destination}")
+    try:
+        # First try with curl command
+        result = subprocess.run(
+            ["curl", "-L", "-o", destination, url],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        print(f"curl output: {result.stdout}")
+        if result.stderr:
+            print(f"curl stderr: {result.stderr}")
+            
+        # Verify file exists and has content
+        if os.path.exists(destination):
+            size = os.path.getsize(destination)
+            print(f"File downloaded successfully. Size: {size} bytes")
+            return True
+        else:
+            print(f"File doesn't exist after download")
+            return False
+    except subprocess.CalledProcessError as e:
+        print(f"curl download failed: {e}")
+        print(f"stdout: {e.stdout}")
+        print(f"stderr: {e.stderr}")
+        
+        # Try with python's urllib as fallback
+        try:
+            import urllib.request
+            print("Trying download with urllib")
+            urllib.request.urlretrieve(url, destination)
+            
+            if os.path.exists(destination):
+                size = os.path.getsize(destination)
+                print(f"File downloaded with urllib. Size: {size} bytes")
+                return True
+            else:
+                print("File still doesn't exist after urllib download")
+                return False
+        except Exception as urllib_e:
+            print(f"urllib download also failed: {urllib_e}")
+            return False
+    except Exception as e:
+        print(f"Unexpected error in download_file: {e}")
+        return False
+
 def load_tags_from_project(project_path):
     """Load tags from a DeepDanbooru project directory."""
     tags_path = os.path.join(project_path, 'tags.txt')
@@ -48,21 +98,58 @@ async def startup_event():
         print(f"Loading model from {model_path}...")
         # Verify model directory exists
         if not os.path.exists(model_path):
+            print(f"Creating model directory {model_path}")
             os.makedirs(model_path, exist_ok=True)
             
         # Check if model files exist, download if not
         model_file = os.path.join(model_path, "model-resnet_custom_v3.h5")
         tags_file = os.path.join(model_path, "tags.txt")
         
+        # Print the available disk space
+        try:
+            disk_usage = subprocess.check_output(["df", "-h", "."]).decode()
+            print(f"Disk usage:\n{disk_usage}")
+        except:
+            print("Could not check disk usage")
+        
         if not os.path.exists(model_file) or os.path.getsize(model_file) < 1000000:
             print("Model file missing or incomplete. Downloading...")
-            os.system(f"curl -L -o {model_file} https://github.com/KichangKim/DeepDanbooru/releases/download/v3-20211112-sgd-e28/model-resnet_custom_v3.h5")
+            model_url = "https://github.com/KichangKim/DeepDanbooru/releases/download/v3-20211112-sgd-e28/model-resnet_custom_v3.h5"
+            success = download_file(model_url, model_file)
+            
+            if not success:
+                raise Exception("Failed to download model file")
+                
+            # Verify the downloaded file
+            if os.path.exists(model_file):
+                size = os.path.getsize(model_file)
+                print(f"Downloaded model file size: {size} bytes")
+                if size < 1000000:
+                    raise Exception(f"Downloaded model file too small: {size} bytes")
+            else:
+                raise Exception("Model file not found after download attempt")
             
         if not os.path.exists(tags_file):
             print("Tags file missing. Downloading...")
-            os.system(f"curl -L -o {tags_file} https://github.com/KichangKim/DeepDanbooru/releases/download/v3-20211112-sgd-e28/tags.txt")
+            tags_url = "https://github.com/KichangKim/DeepDanbooru/releases/download/v3-20211112-sgd-e28/tags.txt"
+            success = download_file(tags_url, tags_file)
+            
+            if not success:
+                raise Exception("Failed to download tags file")
         
+        # Check file sizes and contents
+        model_size = os.path.getsize(model_file) if os.path.exists(model_file) else 0
+        tags_size = os.path.getsize(tags_file) if os.path.exists(tags_file) else 0
+        print(f"Model file size: {model_size} bytes")
+        print(f"Tags file size: {tags_size} bytes")
+        
+        # Check model file header to see if it's a valid HDF5 file
+        with open(model_file, 'rb') as f:
+            header = f.read(8)
+            print(f"Model file header bytes: {header}")
+            
         # Load model with TensorFlow
+        print(f"Loading model from {model_file}")
         model = tf.keras.models.load_model(model_file, compile=False)
         print("Model loaded successfully")
         
@@ -71,6 +158,8 @@ async def startup_event():
         print(f"Loaded {len(tags_list)} tags")
     except Exception as e:
         print(f"Error loading model: {e}")
+        import traceback
+        traceback.print_exc()
         raise
 
 @app.get("/")
