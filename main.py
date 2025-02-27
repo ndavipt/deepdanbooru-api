@@ -1,13 +1,14 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import deepdanbooru as dd
 import tensorflow as tf
 import numpy as np
 from PIL import Image
 import io
 import os
 import time
+import json
 
+# Direct DeepDanbooru model handling without using the commands module
 app = FastAPI(
     title="DeepDanbooru API",
     description="API service for analyzing images using DeepDanbooru",
@@ -26,6 +27,16 @@ app.add_middleware(
 # Global variables for model and tags
 model = None
 tags_list = None
+
+def load_tags_from_project(project_path):
+    """Load tags from a DeepDanbooru project directory."""
+    tags_path = os.path.join(project_path, 'tags.txt')
+    if not os.path.exists(tags_path):
+        raise Exception(f"Tags file not found at {tags_path}")
+        
+    with open(tags_path, 'r') as f:
+        tags = [line.strip() for line in f.readlines()]
+    return tags
 
 @app.on_event("startup")
 async def startup_event():
@@ -52,11 +63,11 @@ async def startup_event():
             os.system(f"curl -L -o {tags_file} https://github.com/KichangKim/DeepDanbooru/releases/download/v3-20211112-sgd-e28/tags.txt")
         
         # Load model with TensorFlow
-        model = dd.project.load_model_from_project(model_path, compile_model=False)
+        model = tf.keras.models.load_model(model_file, compile=False)
         print("Model loaded successfully")
         
         # Load tags
-        tags_list = dd.project.load_tags_from_project(model_path)
+        tags_list = load_tags_from_project(model_path)
         print(f"Loaded {len(tags_list)} tags")
     except Exception as e:
         print(f"Error loading model: {e}")
