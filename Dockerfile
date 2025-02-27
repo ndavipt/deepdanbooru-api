@@ -2,12 +2,13 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including git
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
     wget \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
