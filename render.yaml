@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: deepdanbooru-api
+    env: docker
+    region: oregon
+    plan: standard  # Using standard plan for more RAM
+    branch: main
+    numInstances: 1
+    healthCheckPath: /health
+    buildCommand: ""  # Docker builds are automatic
+    startCommand: ""  # Docker runs are automatic
+    envVars:
+      - key: PORT
+        value: 8000
