@@ -1,9 +1,9 @@
 services:
   - type: web
-    name: tagging-api
+    name: deepdanbooru-api
     env: docker
     region: oregon
-    plan: free
+    plan: standard
     branch: main
     numInstances: 1
     healthCheckPath: /health
